@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Vipti"
+description = "A personal AI voice assistant that lets people speak naturally, see an expressive conversation history, and hear thoughtful responses hands-free."
+version = "1.0.0"
+id = "artifacts/vipti"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26250
+
+[services.development]
+run = "pnpm --filter @workspace/vipti run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/vipti", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/vipti/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26250"
+BASE_PATH = "/"
