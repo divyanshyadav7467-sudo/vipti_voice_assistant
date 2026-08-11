@@ -35,7 +35,7 @@ function notConnected(res: Response): void {
 async function openAiRequest(
   path: string,
   body: Record<string, unknown>,
-): Promise<Response> {
+): Promise<globalThis.Response> {
   const key = getApiKey();
   if (!key) {
     throw new Error("OPENAI_API_KEY_MISSING");

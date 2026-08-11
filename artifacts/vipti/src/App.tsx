@@ -61,8 +61,8 @@ function Logo({ small = false }: { small?: boolean }) {
   </div>;
 }
 
-function Sidebar({ onNew, onSettings, collapsed, onCollapse }: { onNew: () => void; onSettings: () => void; collapsed: boolean; onCollapse: () => void }) {
-  return <aside className={`${collapsed ? 'w-[78px]' : 'w-[272px]'} flex shrink-0 flex-col justify-between bg-sidebar px-4 py-5 text-sidebar-foreground transition-all duration-300 max-md:fixed max-md:z-30 max-md:h-full ${collapsed ? 'max-md:-translate-x-full' : 'max-md:translate-x-0'}`} data-testid="sidebar-navigation">
+function Sidebar({ onNew, onSettings, collapsed, mobileOpen, onCollapse }: { onNew: () => void; onSettings: () => void; collapsed: boolean; mobileOpen: boolean; onCollapse: () => void }) {
+  return <aside className={`${collapsed ? 'w-[78px]' : 'w-[272px]'} flex shrink-0 flex-col justify-between bg-sidebar px-4 py-5 text-sidebar-foreground transition-all duration-300 max-md:fixed max-md:z-30 max-md:h-full ${mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full'}`} data-testid="sidebar-navigation">
     <div>
       <div className="mb-8 flex items-center justify-between px-2">
         <Logo small={collapsed} />
@@ -209,8 +209,9 @@ function Home() {
   const [voice, setVoice] = useState(false);
   const [settings, setSettings] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
-  return <div className="vipti-grain flex min-h-[100dvh] bg-background text-foreground"><Sidebar onNew={() => setSessionKey(value => value + 1)} onSettings={() => setSettings(true)} collapsed={collapsed} onCollapse={() => setCollapsed(!collapsed)} /><Companion key={sessionKey} onMenu={() => setCollapsed(false)} />{voice && <VoicePanel onClose={() => setVoice(false)} />}{settings && <SettingsPanel onClose={() => setSettings(false)} />}</div>;
+  return <div className="vipti-grain flex min-h-[100dvh] bg-background text-foreground"><Sidebar onNew={() => { setSessionKey(value => value + 1); setMobileOpen(false); }} onSettings={() => { setSettings(true); setMobileOpen(false); }} collapsed={collapsed} mobileOpen={mobileOpen} onCollapse={() => setCollapsed(!collapsed)} /><Companion key={sessionKey} onMenu={() => setMobileOpen(true)} />{voice && <VoicePanel onClose={() => setVoice(false)} />}{settings && <SettingsPanel onClose={() => setSettings(false)} />}</div>;
 }
 
 function Router() { return <ErrorBoundary resetKey={useLocation()[0]}><Switch><Route path="/" component={Home} /><Route component={NotFound} /></Switch></ErrorBoundary>; }
