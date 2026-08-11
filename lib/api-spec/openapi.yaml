@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: vipti
+    description: Vipti AI chat and speech operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /vipti/chat:
+    post:
+      operationId: sendViptiChat
+      tags: [vipti]
+      summary: Send a message to Vipti
+      description: Returns a friendly Hindi/Hinglish AI response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViptiChatInput"
+      responses:
+        "200":
+          description: Vipti response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViptiChatResponse"
+        "400":
+          description: Invalid message
+        "503":
+          description: AI service is not connected
+  /vipti/speech:
+    post:
+      operationId: createViptiSpeech
+      tags: [vipti]
+      summary: Turn Vipti's reply into speech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViptiSpeechInput"
+      responses:
+        "200":
+          description: MP3 audio encoded as base64
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViptiSpeechResponse"
+        "400":
+          description: Invalid text
+        "503":
+          description: AI service is not connected
 components:
   schemas:
     HealthStatus:
@@ -33,4 +80,57 @@ components:
           type: string
       required:
         - status
+    ViptiHistoryMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          minLength: 1
+      required:
+        - role
+        - content
+    ViptiChatInput:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+        history:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ViptiHistoryMessage"
+      required:
+        - message
+    ViptiChatResponse:
+      type: object
+      properties:
+        reply:
+          type: string
+        model:
+          type: string
+      required:
+        - reply
+        - model
+    ViptiSpeechInput:
+      type: object
+      properties:
+        text:
+          type: string
+          minLength: 1
+      required:
+        - text
+    ViptiSpeechResponse:
+      type: object
+      properties:
+        audioBase64:
+          type: string
+        contentType:
+          type: string
+      required:
+        - audioBase64
+        - contentType
 
