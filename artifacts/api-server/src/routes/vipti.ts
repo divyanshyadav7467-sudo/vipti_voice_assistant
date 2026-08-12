@@ -9,7 +9,7 @@ import {
 const router: IRouter = Router();
 
 const CHAT_MODEL = "gpt-5.4-mini";
-const SPEECH_MODEL = "gpt-4o-mini-tts";
+const SPEECH_MODEL = "tts-1";
 
 const SYSTEM_PROMPT = `You are Vipti, a friendly, cheerful, caring personal voice companion.
 Reply in natural Hindi/Hinglish by default. Match the user's script and language when helpful:
@@ -17,7 +17,8 @@ Reply in natural Hindi/Hinglish by default. Match the user's script and language
 - Use Devanagari when the user uses Devanagari.
 Keep replies conversational, warm, and specific to what the user actually said. Never use a fixed generic reply.
 Ask a gentle follow-up only when it helps. Be concise enough to sound natural when spoken aloud.
-Do not claim to have done actions, accessed private data, or remember things that are not in this conversation.
+You are an AI companion, not a real human. Do not pretend to have a body, personal life, human experiences, or feelings. Be transparent when that matters.
+Only use the user-approved memories supplied below as longer-term context. Do not invent, infer, or silently save memories.
 For urgent safety or medical situations, encourage the user to contact a qualified professional or local emergency service.`;
 
 function getApiKey(): string | undefined {
@@ -67,13 +68,18 @@ router.post("/vipti/chat", async (req, res): Promise<void> => {
     role: message.role,
     content: message.content,
   }));
+  const memories = (parsed.data.memory ?? []).slice(-12);
+  const memoryContext =
+    memories.length > 0
+      ? `\n\nUser-approved memories for this room (use only when relevant):\n${memories.map((memory) => `- ${memory.content}`).join("\n")}`
+      : "";
 
   try {
     const response = await openAiRequest("chat/completions", {
       model: CHAT_MODEL,
       max_completion_tokens: 8192,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: SYSTEM_PROMPT + memoryContext },
         ...history,
         { role: "user", content: parsed.data.message },
       ],
@@ -126,16 +132,23 @@ router.post("/vipti/speech", async (req, res): Promise<void> => {
       model: SPEECH_MODEL,
       voice: "coral",
       input: parsed.data.text,
-      instructions:
-        "Speak warmly and naturally, like a cheerful caring friend. Preserve Hindi and Hinglish pronunciation.",
       response_format: "mp3",
     });
 
     if (!response.ok) {
-      req.log.error({ status: response.status }, "Vipti speech provider error");
+      const providerError = (await response
+        .clone()
+        .json()
+        .catch(() => null)) as { error?: { message?: string } } | null;
+      req.log.error(
+        { status: response.status, providerMessage: providerError?.error?.message },
+        "Vipti speech provider error",
+      );
       res.status(503).json({
         error:
-          "Vipti could not generate audio right now. The reply is still available as text.",
+          response.status === 429
+            ? "Vipti's voice service is temporarily rate-limited. Please try Suno again in a moment; the reply is still available as text."
+            : "Vipti could not generate audio right now. The reply is still available as text.",
       });
       return;
     }

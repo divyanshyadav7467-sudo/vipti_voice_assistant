@@ -23,11 +23,21 @@ export interface ViptiHistoryMessage {
   content: string;
 }
 
+export interface ViptiMemory {
+  /**
+     * @minLength 3
+     * @maxLength 160
+     */
+  content: string;
+}
+
 export interface ViptiChatInput {
   /** @minLength 1 */
   message: string;
   /** @maxItems 20 */
   history?: ViptiHistoryMessage[];
+  /** @maxItems 12 */
+  memory?: ViptiMemory[];
 }
 
 export interface ViptiChatResponse {

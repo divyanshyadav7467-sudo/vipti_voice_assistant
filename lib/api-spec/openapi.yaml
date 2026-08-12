@@ -103,8 +103,22 @@ components:
           maxItems: 20
           items:
             $ref: "#/components/schemas/ViptiHistoryMessage"
+        memory:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/ViptiMemory"
       required:
         - message
+    ViptiMemory:
+      type: object
+      properties:
+        content:
+          type: string
+          minLength: 3
+          maxLength: 160
+      required:
+        - content
     ViptiChatResponse:
       type: object
       properties:

@@ -11,5 +11,6 @@ export * from './viptiChatInput';
 export * from './viptiChatResponse';
 export * from './viptiHistoryMessage';
 export * from './viptiHistoryMessageRole';
+export * from './viptiMemory';
 export * from './viptiSpeechInput';
 export * from './viptiSpeechResponse';

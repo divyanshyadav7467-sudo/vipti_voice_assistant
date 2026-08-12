@@ -25,6 +25,11 @@ export const HealthCheckResponse = zod.object({
 
 export const sendViptiChatBodyHistoryMax = 20;
 
+export const sendViptiChatBodyMemoryItemContentMin = 3;
+export const sendViptiChatBodyMemoryItemContentMax = 160;
+
+export const sendViptiChatBodyMemoryMax = 12;
+
 
 
 export const SendViptiChatBody = zod.object({
@@ -32,7 +37,10 @@ export const SendViptiChatBody = zod.object({
   "history": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
   "content": zod.string().min(1)
-})).max(sendViptiChatBodyHistoryMax).optional()
+})).max(sendViptiChatBodyHistoryMax).optional(),
+  "memory": zod.array(zod.object({
+  "content": zod.string().min(sendViptiChatBodyMemoryItemContentMin).max(sendViptiChatBodyMemoryItemContentMax)
+})).max(sendViptiChatBodyMemoryMax).optional()
 })
 
 export const SendViptiChatResponse = zod.object({

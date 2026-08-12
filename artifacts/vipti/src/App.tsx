@@ -14,6 +14,7 @@ import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 const queryClient = new QueryClient();
 
 type Message = { id: number; role: 'user' | 'vipti'; text: string; time: string };
+type ViptiMemory = { content: string };
 type RecognitionLike = {
   lang: string;
   interimResults: boolean;
@@ -39,6 +40,32 @@ const history = [
   { title: 'Should I send the message?', date: 'Sun, Jun 16', tone: 'gold' },
   { title: 'Small question, big feeling', date: 'Thu, Jun 13', tone: 'lavender' },
 ];
+
+const MEMORY_STORAGE_KEY = 'vipti-approved-memory';
+
+function readStoredMemory(): ViptiMemory[] {
+  try {
+    const stored = localStorage.getItem(MEMORY_STORAGE_KEY);
+    const parsed: unknown = stored ? JSON.parse(stored) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ViptiMemory => (
+      typeof item === 'object' &&
+      item !== null &&
+      'content' in item &&
+      typeof item.content === 'string' &&
+      item.content.trim().length >= 3
+    )).slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+function extractApprovedMemory(text: string): ViptiMemory | null {
+  const match = text.match(/(?:remember that|please remember|yaad rakhna|yaad rakho)\s*(?:that\s*)?(.+)/i);
+  const content = match?.[1]?.trim().replace(/[.!?]+$/, '');
+  if (!content || content.length < 3 || content.length > 160) return null;
+  return { content };
+}
 
 function errorText(error: unknown, fallback: string): string {
   if (typeof error === 'object' && error !== null && 'data' in error) {
@@ -140,7 +167,7 @@ function MessageBubble({ message, onSpeak, speaking }: { message: Message; onSpe
   </div>;
 }
 
-function Companion({ onMenu }: { onMenu: () => void }) {
+function Companion({ onMenu, memory, onRememberMemory }: { onMenu: () => void; memory: ViptiMemory[]; onRememberMemory: (memory: ViptiMemory) => void }) {
   const [messages, setMessages] = useState<Message[]>([starterMessage]);
   const [typing, setTyping] = useState(false);
   const [error, setError] = useState('');
@@ -159,10 +186,13 @@ function Companion({ onMenu }: { onMenu: () => void }) {
     setError('');
     const userMessage: Message = { id: Date.now(), role: 'user', text: clean, time: 'Just now' };
     const context = messages.map(message => ({ role: message.role === 'vipti' ? 'assistant' as const : 'user' as const, content: message.text }));
+    const approvedMemory = extractApprovedMemory(clean);
+    if (approvedMemory) onRememberMemory(approvedMemory);
     setMessages(prev => [...prev, userMessage]);
     setTyping(true);
     try {
-      const result = await chat.mutateAsync({ data: { message: clean, history: context } });
+      const currentMemory = approvedMemory ? [...memory, approvedMemory] : memory;
+      const result = await chat.mutateAsync({ data: { message: clean, history: context, memory: currentMemory.slice(-12) } });
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'vipti', text: result.reply, time: 'Just now' }]);
     } catch (requestError) {
       setError(errorText(requestError, 'Vipti AI is not connected right now. Add OPENAI_API_KEY on the server, then try again.'));
@@ -198,11 +228,11 @@ function VoicePanel({ onClose }: { onClose: () => void }) {
   return <div className="fixed inset-0 z-40 flex items-center justify-center bg-sidebar/40 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" data-testid="voice-panel"><div className="relative w-full max-w-[520px] overflow-hidden rounded-[30px] bg-sidebar p-8 text-sidebar-foreground shadow-2xl sm:p-12"><button onClick={onClose} className="absolute right-5 top-5 rounded-xl p-2 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground" aria-label="Close voice panel"><X className="h-5 w-5" /></button><div className="mx-auto flex max-w-[310px] flex-col items-center text-center"><div className="relative mb-8 flex h-[142px] w-[142px] items-center justify-center rounded-full bg-[#e7b876] shadow-[0_20px_50px_hsl(14_73%_52%_/_0.22)]"><span className="pulse-ring absolute inset-0 rounded-full border border-primary/70" /><span className="absolute h-[76px] w-[76px] rounded-full border border-white/30" /><Mic className="relative h-8 w-8 text-white" /></div><p className="font-mono text-[10px] uppercase tracking-[.2em] text-secondary">Browser microphone</p><h2 className="mt-3 font-serif text-4xl tracking-[-.03em]">Bol do, main sun rahi hoon.</h2><p className="mt-4 text-sm leading-relaxed text-sidebar-foreground/55">Tap the microphone in the message box to use Hindi speech recognition. Vipti will respond to the words the browser hears.</p><button onClick={onClose} className="mt-10 rounded-full border border-sidebar-border px-5 py-3 text-xs font-semibold text-sidebar-foreground/70 hover:bg-sidebar-accent">Close</button></div></div></div>;
 }
 
-function SettingsPanel({ onClose }: { onClose: () => void }) {
+function SettingsPanel({ onClose, memory, onClearMemory }: { onClose: () => void; memory: ViptiMemory[]; onClearMemory: () => void }) {
   const [dark, setDark] = useState(false);
   const [sound, setSound] = useState(true);
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); }, [dark]);
-  return <div className="fixed inset-0 z-40 flex justify-end bg-sidebar/20 backdrop-blur-[2px]" role="dialog" aria-modal="true" data-testid="settings-panel"><div className="h-full w-full max-w-[440px] overflow-y-auto border-l border-border bg-background p-6 shadow-2xl sm:p-9"><div className="mb-10 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.17em] text-muted-foreground">Your room</p><h2 className="mt-1 font-serif text-3xl">Settings</h2></div><button onClick={onClose} className="rounded-xl p-2.5 text-muted-foreground hover:bg-muted" aria-label="Close settings"><X className="h-5 w-5" /></button></div><div className="space-y-7"><section><h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Experience</h3><div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="flex items-center justify-between border-b border-border p-4"><span className="flex items-center gap-3"><Moon className="h-4 w-4 text-primary" /><span><span className="block text-sm font-medium">Night room</span><span className="block text-xs text-muted-foreground">A softer palette for late thoughts</span></span></span><button onClick={() => setDark(!dark)} className={`relative h-6 w-11 rounded-full transition ${dark ? 'bg-primary' : 'bg-muted'}`} aria-label="Toggle night room"><span className={`absolute top-1 h-4 w-4 rounded-full bg-card shadow-sm transition-transform ${dark ? 'translate-x-6' : 'translate-x-1'}`} /></button></div><div className="flex items-center justify-between p-4"><span className="flex items-center gap-3"><Volume2 className="h-4 w-4 text-accent" /><span><span className="block text-sm font-medium">Voice replies</span><span className="block text-xs text-muted-foreground">Use the listen button on Vipti's replies</span></span></span><button onClick={() => setSound(!sound)} className={`relative h-6 w-11 rounded-full transition ${sound ? 'bg-accent' : 'bg-muted'}`} aria-label="Toggle voice replies"><span className={`absolute top-1 h-4 w-4 rounded-full bg-card shadow-sm transition-transform ${sound ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></div></section><section><h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Accessibility</h3><div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4"><Headphones className="mt-0.5 h-4 w-4 text-primary" /><div><p className="text-sm font-medium">Voice & captions</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Microphone input depends on browser support and permission. Every AI reply is always shown as text.</p></div></div></section><section><h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">AI connection</h3><div className="rounded-2xl bg-[#e9d7b4]/45 p-5"><div className="mb-3 flex items-center gap-2 text-primary"><Sparkles className="h-4 w-4" /><span className="text-sm font-semibold">Private by design</span></div><p className="text-sm leading-relaxed text-foreground/70">Vipti sends messages to the server, where OPENAI_API_KEY is read privately. The key is never included in frontend code. If the connection is unavailable, Vipti shows a clear error instead of a canned reply.</p></div></section></div></div></div>;
+  return <div className="fixed inset-0 z-40 flex justify-end bg-sidebar/20 backdrop-blur-[2px]" role="dialog" aria-modal="true" data-testid="settings-panel"><div className="h-full w-full max-w-[440px] overflow-y-auto border-l border-border bg-background p-6 shadow-2xl sm:p-9"><div className="mb-10 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[.17em] text-muted-foreground">Your room</p><h2 className="mt-1 font-serif text-3xl">Settings</h2></div><button onClick={onClose} className="rounded-xl p-2.5 text-muted-foreground hover:bg-muted" aria-label="Close settings"><X className="h-5 w-5" /></button></div><div className="space-y-7"><section><h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Experience</h3><div className="overflow-hidden rounded-2xl border border-border bg-card"><div className="flex items-center justify-between border-b border-border p-4"><span className="flex items-center gap-3"><Moon className="h-4 w-4 text-primary" /><span><span className="block text-sm font-medium">Night room</span><span className="block text-xs text-muted-foreground">A softer palette for late thoughts</span></span></span><button onClick={() => setDark(!dark)} className={`relative h-6 w-11 rounded-full transition ${dark ? 'bg-primary' : 'bg-muted'}`} aria-label="Toggle night room"><span className={`absolute top-1 h-4 w-4 rounded-full bg-card shadow-sm transition-transform ${dark ? 'translate-x-6' : 'translate-x-1'}`} /></button></div><div className="flex items-center justify-between p-4"><span className="flex items-center gap-3"><Volume2 className="h-4 w-4 text-accent" /><span><span className="block text-sm font-medium">Voice replies</span><span className="block text-xs text-muted-foreground">Use the listen button on Vipti's replies</span></span></span><button onClick={() => setSound(!sound)} className={`relative h-6 w-11 rounded-full transition ${sound ? 'bg-accent' : 'bg-muted'}`} aria-label="Toggle voice replies"><span className={`absolute top-1 h-4 w-4 rounded-full bg-card shadow-sm transition-transform ${sound ? 'translate-x-6' : 'translate-x-1'}`} /></button></div></div></section><section><h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Accessibility</h3><div className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4"><Headphones className="mt-0.5 h-4 w-4 text-primary" /><div><p className="text-sm font-medium">Voice & captions</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">Microphone input depends on browser support and permission. Every AI reply is always shown as text.</p></div></div></section><section><h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">Memory</h3><div className="rounded-2xl border border-border bg-card p-4"><div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-medium">Approved memories</p><p className="mt-1 text-xs text-muted-foreground">{memory.length ? `${memory.length} saved preference${memory.length === 1 ? '' : 's'}` : 'Nothing saved yet'}</p></div><button onClick={onClearMemory} disabled={!memory.length} className="rounded-lg border border-destructive/30 px-2.5 py-1.5 text-[11px] font-semibold text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-40">Clear memory</button></div>{memory.length > 0 && <ul className="space-y-2 border-t border-border pt-3">{memory.map((item, index) => <li key={`${item.content}-${index}`} className="text-xs leading-relaxed text-foreground/70">“{item.content}”</li>)}</ul>}<p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">Vipti only saves a preference when you say “remember that…” or “yaad rakhna…”.</p></div></section><section><h3 className="mb-3 font-mono text-[10px] uppercase tracking-[.16em] text-muted-foreground">AI connection</h3><div className="rounded-2xl bg-[#e9d7b4]/45 p-5"><div className="mb-3 flex items-center gap-2 text-primary"><Sparkles className="h-4 w-4" /><span className="text-sm font-semibold">Private by design</span></div><p className="text-sm leading-relaxed text-foreground/70">Vipti sends messages to the server, where OPENAI_API_KEY is read privately. The key is never included in frontend code. If the connection is unavailable, Vipti shows a clear error instead of a canned reply.</p></div></section></div></div></div>;
 }
 
 function Home() {
@@ -211,7 +241,11 @@ function Home() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
-  return <div className="vipti-grain flex min-h-[100dvh] bg-background text-foreground"><Sidebar onNew={() => { setSessionKey(value => value + 1); setMobileOpen(false); }} onSettings={() => { setSettings(true); setMobileOpen(false); }} collapsed={collapsed} mobileOpen={mobileOpen} onCollapse={() => setCollapsed(!collapsed)} /><Companion key={sessionKey} onMenu={() => setMobileOpen(true)} />{voice && <VoicePanel onClose={() => setVoice(false)} />}{settings && <SettingsPanel onClose={() => setSettings(false)} />}</div>;
+  const [memory, setMemory] = useState<ViptiMemory[]>(readStoredMemory);
+  useEffect(() => { localStorage.setItem(MEMORY_STORAGE_KEY, JSON.stringify(memory.slice(-12))); }, [memory]);
+  const rememberMemory = (item: ViptiMemory) => setMemory(previous => previous.some(saved => saved.content.toLowerCase() === item.content.toLowerCase()) ? previous : [...previous, item].slice(-12));
+  const clearMemory = () => setMemory([]);
+  return <div className="vipti-grain flex min-h-[100dvh] bg-background text-foreground"><Sidebar onNew={() => { setSessionKey(value => value + 1); setMobileOpen(false); }} onSettings={() => { setSettings(true); setMobileOpen(false); }} collapsed={collapsed} mobileOpen={mobileOpen} onCollapse={() => setCollapsed(!collapsed)} /><Companion key={sessionKey} onMenu={() => setMobileOpen(true)} memory={memory} onRememberMemory={rememberMemory} />{voice && <VoicePanel onClose={() => setVoice(false)} />}{settings && <SettingsPanel onClose={() => setSettings(false)} memory={memory} onClearMemory={clearMemory} />}</div>;
 }
 
 function Router() { return <ErrorBoundary resetKey={useLocation()[0]}><Switch><Route path="/" component={Home} /><Route component={NotFound} /></Switch></ErrorBoundary>; }

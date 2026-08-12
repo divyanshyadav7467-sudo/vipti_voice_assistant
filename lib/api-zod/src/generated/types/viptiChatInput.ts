@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ViptiHistoryMessage } from './viptiHistoryMessage';
+import type { ViptiMemory } from './viptiMemory';
 
 export interface ViptiChatInput {
   /** @minLength 1 */
   message: string;
   /** @maxItems 20 */
   history?: ViptiHistoryMessage[];
+  /** @maxItems 12 */
+  memory?: ViptiMemory[];
 }
