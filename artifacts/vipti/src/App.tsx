@@ -19,7 +19,13 @@ type RecognitionLike = {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
-  onresult: ((event: { results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+  onresult: ((event: {
+    resultIndex: number;
+    results: ArrayLike<{
+      isFinal: boolean;
+      0: { transcript: string };
+    }>;
+  }) => void) | null;
   onerror: ((event: { error?: string }) => void) | null;
   onend: (() => void) | null;
   start: () => void;
@@ -123,7 +129,7 @@ function Composer({ onSend, onVoice, disabled, listening }: { onSend: (text: str
     <textarea value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder={listening ? 'Listening…' : 'Apne mind mein kya chal raha hai?'} rows={2} disabled={disabled} className="w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/65 disabled:opacity-60" data-testid="input-thought" />
     <div className="flex items-center justify-between border-t border-border/70 px-2 pt-2">
       <div className="flex items-center gap-1"><button className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Keyboard shortcuts"><Keyboard className="h-4 w-4" /></button><span className="hidden font-mono text-[10px] text-muted-foreground/60 sm:block">Shift + Enter for a new line</span></div>
-      <div className="flex items-center gap-1.5"><button onClick={onVoice} className={`rounded-xl p-2.5 ${listening ? 'bg-primary text-primary-foreground' : 'text-primary hover:bg-primary/10'}`} aria-label={listening ? 'Stop listening' : 'Start voice input'} data-testid="button-voice">{listening ? <MicOff className="h-[18px] w-[18px]" /> : <Mic className="h-[18px] w-[18px]" />}</button><button onClick={submit} disabled={!value.trim() || disabled} className="flex items-center gap-2 rounded-xl bg-foreground px-3.5 py-2.5 text-xs font-semibold text-background transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-30" data-testid="button-send">Send <Send className="h-3.5 w-3.5" /></button></div>
+      <div className="flex items-center gap-1.5"><button onClick={onVoice} disabled={disabled} className={`rounded-xl p-2.5 ${listening ? 'bg-primary text-primary-foreground' : 'text-primary hover:bg-primary/10'} disabled:cursor-not-allowed disabled:opacity-40`} aria-label={listening ? 'Stop listening' : 'Start voice input'} aria-pressed={listening} data-testid="button-voice">{listening ? <MicOff className="h-[18px] w-[18px]" /> : <Mic className="h-[18px] w-[18px]" />}</button><button onClick={submit} disabled={!value.trim() || disabled} className="flex items-center gap-2 rounded-xl bg-foreground px-3.5 py-2.5 text-xs font-semibold text-background transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-30" data-testid="button-send">Send <Send className="h-3.5 w-3.5" /></button></div>
     </div>
   </div>;
 }
@@ -141,8 +147,14 @@ function useBrowserVoice(onText: (text: string) => void, onError: (message: stri
     recognition.interimResults = false;
     recognition.continuous = false;
     recognition.onresult = (event) => {
-      const result = event.results[0];
-      if (result?.isFinal && result[0]?.transcript.trim()) onText(result[0].transcript.trim());
+      const transcripts: string[] = [];
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        if (result?.isFinal && result[0]?.transcript.trim()) {
+          transcripts.push(result[0].transcript.trim());
+        }
+      }
+      if (transcripts.length > 0) onText(transcripts.join(' '));
     };
     recognition.onerror = (event) => {
       setListening(false);
@@ -185,7 +197,7 @@ function Companion({ onMenu, memory, onRememberMemory }: { onMenu: () => void; m
     if (!clean || typing) return;
     setError('');
     const userMessage: Message = { id: Date.now(), role: 'user', text: clean, time: 'Just now' };
-    const context = messages.map(message => ({ role: message.role === 'vipti' ? 'assistant' as const : 'user' as const, content: message.text }));
+       const context = messages.slice(-20).map(message => ({ role: message.role === 'vipti' ? 'assistant' as const : 'user' as const, content: message.text }));
     const approvedMemory = extractApprovedMemory(clean);
     if (approvedMemory) onRememberMemory(approvedMemory);
     setMessages(prev => [...prev, userMessage]);
