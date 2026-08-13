@@ -9,7 +9,12 @@ import {
 const router: IRouter = Router();
 
 const CHAT_MODEL = "gpt-5.4-mini";
-const SPEECH_MODEL = "tts-1";
+const NATURAL_SPEECH_MODEL = "gpt-4o-mini-tts";
+const SPEECH_FALLBACK_MODEL = "tts-1-hd";
+const SPEECH_VOICE = "coral";
+const SPEECH_SPEED = 0.96;
+const SPEECH_INSTRUCTIONS =
+  "Speak as Vipti: warm, caring, natural, and gently expressive. Use a relaxed conversational Hindi/Hinglish delivery. Add brief, natural pauses at commas and between thoughts, let reassuring phrases breathe, and avoid sounding like an announcement or an exaggerated performance. Pronounce both Roman Hindi and English words clearly. Never imply that you are a real human.";
 
 const SYSTEM_PROMPT = `You are Vipti, a friendly, cheerful, caring personal voice companion.
 Reply in natural Hindi/Hinglish by default. Match the user's script and language when helpful:
@@ -31,6 +36,22 @@ function notConnected(res: Response): void {
     error:
       "Vipti AI is not connected. Add OPENAI_API_KEY to the server environment to enable real replies.",
   });
+}
+
+function speechBody(model: string, text: string): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    model,
+    voice: SPEECH_VOICE,
+    input: text,
+    response_format: "mp3",
+    speed: SPEECH_SPEED,
+  };
+
+  if (model === NATURAL_SPEECH_MODEL) {
+    body.instructions = SPEECH_INSTRUCTIONS;
+  }
+
+  return body;
 }
 
 async function openAiRequest(
@@ -128,12 +149,23 @@ router.post("/vipti/speech", async (req, res): Promise<void> => {
   }
 
   try {
-    const response = await openAiRequest("audio/speech", {
-      model: SPEECH_MODEL,
-      voice: "coral",
-      input: parsed.data.text,
-      response_format: "mp3",
-    });
+    let response = await openAiRequest(
+      "audio/speech",
+      speechBody(NATURAL_SPEECH_MODEL, parsed.data.text),
+    );
+
+    // Keep the existing voice flow compatible with providers/accounts that
+    // have not enabled the newer instruction-following TTS model yet.
+    if (response.status === 400 || response.status === 404) {
+      req.log.info(
+        { model: NATURAL_SPEECH_MODEL, fallbackModel: SPEECH_FALLBACK_MODEL },
+        "Natural Vipti speech model unavailable; trying fallback",
+      );
+      response = await openAiRequest(
+        "audio/speech",
+        speechBody(SPEECH_FALLBACK_MODEL, parsed.data.text),
+      );
+    }
 
     if (!response.ok) {
       const providerError = (await response
