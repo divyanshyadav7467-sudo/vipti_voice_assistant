@@ -1,15 +1,18 @@
-# [Project name]
+# Vipti Voice Assistant
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Vipti is a warm Hindi/Hinglish AI conversation companion with browser microphone input, server-side AI chat, and optional voice playback.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port supplied by the workflow, usually 8080)
+- `pnpm --filter @workspace/vipti run dev` — run the Vite web client (port supplied by the workflow, usually 26250)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required server secret: `OPENAI_API_KEY` — enables real Vipti chat and server-generated Suno audio; keep it server-side
+- Runtime-managed: `DATABASE_URL` — the Replit PostgreSQL connection string
+- Existing `SESSION_SECRET` is preserved for the project environment
 
 ## Stack
 
@@ -22,23 +25,34 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/vipti/src/App.tsx` — chat UI, browser speech recognition, conversation context, approved local memory, and voice playback
+- `artifacts/api-server/src/routes/vipti.ts` — server-side AI chat and speech proxy; the OpenAI key never enters the browser bundle
+- `lib/api-spec/openapi.yaml` — source of truth for the chat and speech contracts
+- `lib/api-zod` and `lib/api-client-react` — generated request/response types and React Query hooks
+- `lib/db/src/schema` — Drizzle schema source (currently empty; the companion's approved memory is local-only)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Browser voice input uses `SpeechRecognition` / `webkitSpeechRecognition` with `hi-IN`; unsupported browsers receive a clear typed-input fallback.
+- The current conversation is sent as bounded context with each chat request; it is not persisted as a transcript.
+- Memory is intentionally opt-in: only phrases beginning with “remember that…” or “yaad rakhna…” are stored in browser local storage and can be cleared in Settings.
+- Server-generated OpenAI speech is preferred; the Suno button falls back to the browser's Hindi/English speech synthesis when the server provider is unavailable.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Type or speak Hindi/Hinglish messages and receive context-aware Vipti replies.
+- Use “सुनो” on any Vipti reply for audio playback.
+- Review and clear user-approved memories from Settings.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep the existing pnpm workspace and API connection; do not expose `OPENAI_API_KEY` in frontend code.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Microphone input requires browser support and microphone permission; HTTPS or localhost is typically required by browsers.
+- Add `OPENAI_API_KEY` through Replit Secrets before testing live AI chat or server-side TTS.
+- Run `pnpm run typecheck` from the workspace root so project-reference libraries are built before artifact checks.
 
 ## Pointers
 

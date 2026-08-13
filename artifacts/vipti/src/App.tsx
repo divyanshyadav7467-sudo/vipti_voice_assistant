@@ -84,6 +84,32 @@ function errorText(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function browserSpeak(text: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+      reject(new Error('Browser speech synthesis is not supported.'));
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const isDevanagari = /[\u0900-\u097f]/u.test(text);
+    utterance.lang = isDevanagari ? 'hi-IN' : 'en-IN';
+    utterance.rate = 0.96;
+    utterance.pitch = 1.02;
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => (
+      isDevanagari
+        ? voice.lang.toLowerCase().startsWith('hi')
+        : voice.lang.toLowerCase().startsWith('en-in')
+    ));
+    if (preferredVoice) utterance.voice = preferredVoice;
+    utterance.onend = () => resolve();
+    utterance.onerror = () => reject(new Error('Browser speech synthesis could not play this reply.'));
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
 function Logo({ small = false }: { small?: boolean }) {
   return <div className={`flex items-center gap-2.5 ${small ? 'scale-90 origin-left' : ''}`} data-testid="brand-vipti">
     <div className="relative flex h-9 w-9 items-center justify-center rounded-[13px] bg-primary text-primary-foreground shadow-sm">
@@ -197,7 +223,7 @@ function Companion({ onMenu, memory, onRememberMemory }: { onMenu: () => void; m
     if (!clean || typing) return;
     setError('');
     const userMessage: Message = { id: Date.now(), role: 'user', text: clean, time: 'Just now' };
-       const context = messages.slice(-20).map(message => ({ role: message.role === 'vipti' ? 'assistant' as const : 'user' as const, content: message.text }));
+    const context = messages.slice(-20).map(message => ({ role: message.role === 'vipti' ? 'assistant' as const : 'user' as const, content: message.text }));
     const approvedMemory = extractApprovedMemory(clean);
     if (approvedMemory) onRememberMemory(approvedMemory);
     setMessages(prev => [...prev, userMessage]);
@@ -214,16 +240,22 @@ function Companion({ onMenu, memory, onRememberMemory }: { onMenu: () => void; m
   async function speak(message: Message) {
     setError('');
     setSpeakingId(message.id);
+    window.speechSynthesis?.cancel();
+    audioRef.current?.pause();
     try {
       const result = await speech.mutateAsync({ data: { text: message.text } });
-      audioRef.current?.pause();
       const audio = new Audio(`data:${result.contentType};base64,${result.audioBase64}`);
       audioRef.current = audio;
       audio.onended = () => setSpeakingId(null);
       await audio.play();
     } catch (requestError) {
+      try {
+        await browserSpeak(message.text);
+      } catch {
+        setError(errorText(requestError, 'Vipti voice is not connected right now. You can still read her reply.'));
+      }
+    } finally {
       setSpeakingId(null);
-      setError(errorText(requestError, 'Vipti voice is not connected right now. You can still read her reply.'));
     }
   }
 
